@@ -1,0 +1,191 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>دعوة وميض</title>
+<style>*,*::before,*::after{box-sizing:border-box}html,body{margin:0}img{max-width:100%}[hidden]{display:none!important}</style>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;600;700&display=swap">
+<style>
+  :root{
+    color-scheme: dark;
+    --ground:#1c1a36;
+    --ground-2:#2a2748;
+    --panel:#2f2b52;
+    --line:#4a4570;
+    --ink:#f3f0fa;
+    --muted:#b3add0;
+    --crimson:#a3003b;
+    --crimson-hi:#c2124f;
+    --glow:rgba(194,18,79,.35);
+  }
+  html,body{background:var(--ground);}
+  body{
+    font-family:"IBM Plex Sans Arabic", "Segoe UI", Tahoma, sans-serif;
+    color:var(--ink);
+    background:radial-gradient(120% 80% at 100% 0%, #3d3760 0%, var(--ground) 55%) fixed, var(--ground);
+    min-height:100%;
+    padding-inline:16px;
+    padding-block:28px 40px;
+    direction:rtl;
+  }
+  .wrap{max-width:960px;margin:0 auto;display:grid;gap:28px;grid-template-columns:minmax(0,1fr);}
+  @media (min-width:760px){
+    .wrap{grid-template-columns:minmax(0,1fr) minmax(0,340px);align-items:start;}
+    .preview{grid-column:1;grid-row:1 / span 2;}
+  }
+  header h1{margin:0 0 6px;font-size:1.75rem;font-weight:700;text-wrap:balance;}
+  header p{margin:0;color:var(--muted);font-size:1rem;line-height:1.7;}
+  .preview{display:flex;justify-content:center;}
+  canvas{
+    width:100%;max-width:420px;height:auto;aspect-ratio:1080/1920;
+    border-radius:14px;
+    box-shadow:0 20px 60px rgba(0,0,0,.45), 0 0 0 1px var(--line);
+    background:var(--ground-2);
+  }
+  form{display:grid;gap:14px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px;}
+  label{font-weight:600;font-size:1rem;}
+  input[type=text]{
+    font:inherit;font-size:1.15rem;color:var(--ink);
+    background:var(--ground);border:1px solid var(--line);border-radius:10px;
+    padding:12px 14px;width:100%;box-sizing:border-box;
+  }
+  input[type=text]:focus{outline:2px solid var(--crimson-hi);outline-offset:1px;border-color:transparent;}
+  button{
+    font:inherit;font-weight:700;font-size:1.05rem;color:#fff;
+    background:var(--crimson);border:0;border-radius:10px;padding:13px 16px;cursor:pointer;
+    box-shadow:0 6px 24px var(--glow);
+    transition:background .15s ease, transform .1s ease;
+  }
+  button:hover{background:var(--crimson-hi);}
+  button:active{transform:translateY(1px);}
+  button:focus-visible{outline:2px solid var(--ink);outline-offset:2px;}
+  button:disabled{opacity:.5;cursor:not-allowed;box-shadow:none;}
+  .status{min-height:1.4em;margin:0;color:var(--muted);font-size:.92rem;line-height:1.6;}
+  .fallback{display:grid;gap:10px;}
+  .fallback img{border-radius:10px;max-width:100%;}
+  .hint{color:var(--muted);font-size:.85rem;margin:0;}
+  @media (prefers-reduced-motion:reduce){button{transition:none;}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1>دعوة وميض</h1>
+    <p>اكتب الاسم ليظهر في خانة «الفاضل/ة»، ثم حمّل الدعوة صورةً جاهزة للمشاركة.</p>
+  </header>
+
+  <div class="preview">
+    <canvas id="card" width="1080" height="1920" aria-label="معاينة الدعوة"></canvas>
+  </div>
+
+  <form id="f" autocomplete="off">
+    <label for="name">اسم المدعو/ة</label>
+    <input id="name" type="text" maxlength="40" value="محمد بن سالم" placeholder="اكتب الاسم هنا">
+    <button id="dl" type="submit">تحميل الدعوة</button>
+    <p class="status" id="status" role="status"></p>
+    <div class="fallback" id="fallback" hidden>
+      <p class="hint">إذا لم يبدأ التحميل: اضغط مطوّلًا على الصورة (الجوال) أو انقر بالزر الأيمن واختر «حفظ الصورة».</p>
+      <img id="fbimg" alt="الدعوة بعد إضافة الاسم">
+    </div>
+  </form>
+</div>
+
+<script>
+(function(){
+  const canvas = document.getElementById('card');
+  const ctx = canvas.getContext('2d');
+  const input = document.getElementById('name');
+  const btn = document.getElementById('dl');
+  const statusEl = document.getElementById('status');
+  const fallback = document.getElementById('fallback');
+  const fbimg = document.getElementById('fbimg');
+
+  // The rounded name field in the original design (1080×1920)
+  const BOX = { x:157, y:633, w:765, h:146 };
+  const FONT = '"IBM Plex Sans Arabic", "Segoe UI", Tahoma, sans-serif';
+
+  const bg = new Image();
+  let ready = false;
+
+  function draw(){
+    if(!ready) return;
+    ctx.clearRect(0,0,1080,1920);
+    ctx.drawImage(bg,0,0,1080,1920);
+    const name = input.value.trim();
+    if(!name) return;
+    let size = 72;
+    const maxW = BOX.w - 70;
+    ctx.direction = 'rtl';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    do{
+      ctx.font = `700 ${size}px ${FONT}`;
+      if(ctx.measureText(name).width <= maxW) break;
+      size -= 2;
+    } while(size > 28);
+    ctx.fillStyle = '#ffffff';
+    ctx.shadowColor = 'rgba(28,26,54,.35)';
+    ctx.shadowBlur = 8;
+    ctx.fillText(name, BOX.x + BOX.w/2, BOX.y + BOX.h/2 + size*0.06);
+    ctx.shadowBlur = 0;
+  }
+
+  bg.onload = async function(){
+    try{ await document.fonts.load(`700 72px "IBM Plex Sans Arabic"`, 'الفاضل'); }catch(e){}
+    ready = true;
+    draw();
+  };
+  bg.onerror = function(){ statusEl.textContent = 'تعذّر تحميل صورة الدعوة. أعد فتح الصفحة.'; };
+  bg.src = 'invite.png';
+
+  input.addEventListener('input', function(){
+    fallback.hidden = true;
+    statusEl.textContent = '';
+    draw();
+  });
+
+
+  function toBlob(){
+    return new Promise(res => canvas.toBlob(res, 'image/png'));
+  }
+
+  function showFallback(){
+    fbimg.src = canvas.toDataURL('image/png');
+    fallback.hidden = false;
+  }
+
+  document.getElementById('f').addEventListener('submit', async function(e){
+    e.preventDefault();
+    const name = input.value.trim();
+    if(!name){ statusEl.textContent = 'اكتب الاسم أولًا.'; input.focus(); return; }
+    if(!ready){ statusEl.textContent = 'انتظر لحظة حتى تجهز الدعوة.'; return; }
+    draw();
+    const safe = name.replace(/[\\/:*?"<>|]+/g,'').slice(0,60);
+    const filename = `دعوة وميض - ${safe}.png`;
+    btn.disabled = true;
+    try{
+      const blob = await toBlob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = filename;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url), 4000);
+      statusEl.textContent = 'تم التحميل.';
+      if(/iPhone|iPad|iPod/i.test(navigator.userAgent)) showFallback();
+    }catch(err){
+      showFallback();
+      statusEl.textContent = 'الصورة جاهزة بالأسفل، احفظها يدويًا.';
+    }finally{
+      btn.disabled = false;
+    }
+  });
+})();
+</script>
+
+</body>
+</html>
